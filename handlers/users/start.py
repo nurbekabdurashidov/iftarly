@@ -10,7 +10,7 @@ from api import get_user, create_user, change_user_language
 from keyboards.default.buttons import prayer_times_buttons
 import base64
 import io
-from aiogram.types import BufferedInputFile
+from aiogram.types import BufferedInputFile, InlineKeyboardMarkup
 import aiohttp
 
 API_URL = "http://127.0.0.1:8000/"
@@ -105,14 +105,29 @@ async def set_language(call: types.CallbackQuery, state: FSMContext):
     await call.message.delete()
 
 
+def get_back_button_text(language):
+    back_texts = {
+        "uz": "🔙 Orqaga",
+        "en": "🔙 Back",
+        "ru": "🔙 Назад"
+    }
+    return back_texts.get(language, back_texts["uz"])
+
 # Viloyat tanlash
+def find_region_key(selected_region: str) -> str:
+    """Foydalanuvchi tanlagan region nomi uchun asosiy kalitni ('tashkent', 'samarkand' va h.k.) topish."""
+    for key, names in REGIONS.items():
+        if selected_region in names.values():  # `uz`, `en`, `ru` dagi qiymatlar bo‘yicha tekshiradi
+            return key
+    return selected_region
+
 @dp.callback_query(F.data.startswith("region_"))
 async def set_region(call: types.CallbackQuery, state: FSMContext):
     user = get_user(telegram_id=call.from_user.id)
     language = user.get("language", "uz")
 
-    selected_region_key = call.data.split("_")[1]
-    selected_region_name = REGIONS.get(selected_region_key, {}).get(language, "Noma'lum")
+    selected_region_key = call.data.split("_")[1]  # Masalan, "Toshkent", "Ташкент"
+    selected_region_name = find_region_key(selected_region_key)
 
     # Django API-ga hududni saqlash
     async with aiohttp.ClientSession() as session:
@@ -135,33 +150,46 @@ async def set_region(call: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "dua")
 async def send_dua(call: types.CallbackQuery):
+    user_id = call.from_user.id
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")
+
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{API_URL}/api/get_dua/") as response:
             if response.status == 200:
                 data = await response.json()
                 base64_image = data.get("image")
-                caption = data.get("caption")
+                caption = data.get("caption", "📜 Dua")
 
-                if base64_image and caption:
-                    # Decode Base64 image
-                    image_bytes = base64.b64decode(base64_image)
-                    photo = BufferedInputFile(image_bytes, filename="dua.jpg")
+                if base64_image:
+                    try:
+                        # Base64 ni dekodlash
+                        image_bytes = base64.b64decode(base64_image)
+                        photo = BufferedInputFile(image_bytes, filename="dua.jpg")
 
-                    # Send photo to user
-                    await call.message.answer_photo(photo=photo, caption=caption,reply_markup=prayer_times_buttons())
+                        # "Orqaga" tugmasi
+                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text=get_back_button_text(language), callback_data="back_menu")]
+                        ])
+
+                        # Rasmni yuborish
+                        await call.message.answer_photo(photo=photo, caption=caption, reply_markup=keyboard)
+
+                    except Exception as e:
+                        await call.message.answer(f"❌ Rasmni yuklashda xatolik: {str(e)}")
                 else:
-                    await call.message.answer("❌ Dua topilmadi.")
+                    await call.message.answer("❌ Dua rasmi topilmadi.")
             else:
                 await call.message.answer("❌ Xatolik yuz berdi. Keyinroq urinib ko'ring.")
 
-@dp.callback_query(F.data == "ortga")
-async def send_dua(call: types.CallbackQuery):
-    await call.message.answer("Bosh menu ",reply_markup=prayer_times_buttons())
+
 
 
 
 async def get_ramadan_time(call: types.CallbackQuery, day: str):
     user_id = call.from_user.id
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{API_URL}/api/get_ramadan_time/{user_id}/{day}/") as response:
             if response.status == 200:
@@ -173,8 +201,10 @@ async def get_ramadan_time(call: types.CallbackQuery, day: str):
                 caption += f"🌙 Suhoor: {data['suhoor_time']}\n"
                 caption += f"🌞 Iftar: {data['iftar_time']}\n\n"
                 caption += data["caption"]
-
-                await call.message.answer_photo(photo=photo, caption=caption)
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=get_back_button_text(language), callback_data="back_menu")]
+                ])
+                await call.message.answer_photo(photo=photo, caption=caption,reply_markup=keyboard)
             else:
                 await call.message.answer("❌ Ramadan time not found for your region.")
 
@@ -185,3 +215,160 @@ async def send_today_time(call: types.CallbackQuery):
 @dp.callback_query(F.data == "tomorrow_time")
 async def send_tomorrow_time(call: types.CallbackQuery):
     await get_ramadan_time(call, "tomorrow")
+
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    InputMediaPhoto
+)
+@dp.callback_query(F.data == "monthly_times")
+async def sendee(call: types.CallbackQuery):
+    user_id = call.message.chat.id
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_URL}/api/get_monthly_times/") as response:
+            if response.status != 200:
+                await call.message.answer("❌ Ma'lumotlarni yuklab bo‘lmadi.")
+                return
+
+            data = await response.json()
+
+    if "error" in data:
+        await call.message.answer(f"❌ Xatolik: {data['error']}")
+        return
+
+    try:
+        # ✅ Decode Base64 Image
+        image_bytes = base64.b64decode(data["image"])
+        photo = BufferedInputFile(image_bytes, filename="ramadan.jpg")
+
+        # ✅ Send Photo
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=get_back_button_text(language), callback_data="back_menu")]
+        ])
+
+        await call.message.delete()
+
+        # ✅ Yangi rasm yuborish
+        await call.message.answer_photo(photo=photo, caption=data["caption"], parse_mode="Markdown",
+                                        reply_markup=keyboard)
+
+    except Exception as e:
+        await call.message.answer("❌ Rasmni jo‘natishda xatolik yuz berdi.")
+        print(f"❌ Error: {e}")
+
+
+@dp.callback_query(F.data == "donate")
+async def send_support_message(call: types.CallbackQuery):
+    user_id = call.from_user.id
+
+    # Fetch user data from the database
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")  # Default to Uzbek if no language is found
+
+    # Define messages in different languages
+    messages = {
+        "uz": (
+            "🤝 **Savobli Ishga Hissa Qo‘shing**\n\n"
+            "❗️Sizning ehsoningiz bevosita xayriya loyihalariga yo‘naltiriladi. "
+            "Biz ushbu mablag‘larni o‘zimiz uchun yig‘maymiz.\n\n"
+            "💳 **Karta Raqami:** `4198 1300 4821 3341`\n"
+            "👤 **Karta Egasi:** Turdiyeva Aziza"
+        ),
+        "en": (
+            "🤝 **Support a Good Cause**\n\n"
+            "❗️Your donation will go directly to charity projects. "
+            "We do not collect funds for ourselves.\n\n"
+            "💳 **Card Number:** `4198 1300 4821 3341`\n"
+            "👤 **Cardholder Name:** Turdiyeva Aziza"
+        ),
+        "ru": (
+            "🤝 **Поддержите Благотворительность**\n\n"
+            "❗️Ваше пожертвование пойдет напрямую на благотворительные проекты. "
+            "Мы не собираем средства для себя.\n\n"
+            "💳 **Номер Карты:** `4198 1300 4821 3341`\n"
+            "👤 **Имя Владельца Карты:** Турдиева Азиза"
+        ),
+    }
+
+    # Get the appropriate message (default to Uzbek if language not found)
+    message_text = messages.get(language, messages["uz"])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_back_button_text(language), callback_data="back_menu")]
+    ])
+    # Send the message
+    await call.message.edit_text(message_text, parse_mode="Markdown",reply_markup=keyboard)
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# Back button text for different languages
+ # Default to Uzbek
+
+
+@dp.callback_query(F.data == "settings")
+async def send_settings_message(call: types.CallbackQuery):
+    user_id = call.from_user.id
+
+    # Fetch user data from the database
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")  # Default to Uzbek if not found
+
+    # Define messages in different languages
+    messages = {
+        "uz": (
+            "⚙️ **Sozlamalar**\n\n"
+            "🔄 **Botni qayta ishga tushurish:** /start\n"
+            "🌍 **Tilni o‘zgartirish:** /set_language\n"
+            "📍 **Hududni o‘zgartirish:** /set_region"
+        ),
+        "en": (
+            "⚙️ **Settings**\n\n"
+            "🔄 **Restart Bot:** /start\n"
+            "🌍 **Change Language:** /set_language\n"
+            "📍 **Change Region:** /set_region"
+        ),
+        "ru": (
+            "⚙️ **Настройки**\n\n"
+            "🔄 **Перезапустить бота:** /start\n"
+            "🌍 **Изменить язык:** /set_language\n"
+            "📍 **Изменить регион:** /set_region"
+        ),
+    }
+
+    # Get the appropriate message (default to Uzbek if language not found)
+    message_text = messages.get(language, messages["uz"])
+
+    # Create inline keyboard with "Orqaga" (Back) button
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_back_button_text(language), callback_data="back_menu")]
+    ])
+
+    # Send the message with the back button
+    await call.message.edit_text(message_text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+@dp.callback_query(F.data == "back_menu")
+async def go_back_menu(call: types.CallbackQuery):
+    user_id = call.from_user.id
+    user = get_user(telegram_id=user_id)
+    language = user.get("language", "uz")
+
+    # Define back message translations
+    back_messages = {
+        "uz": "🔙 Asosiy Menu",
+        "en": "🔙 Main Menu",
+        "ru": "🔙 Главное меню",
+    }
+
+    # Get the correct message based on user language
+    back_text = back_messages.get(language, back_messages["uz"])
+
+    # Send "Orqaga" confirmation
+
+    await call.message.delete()
+
+    # Asosiy menyuga qaytish
+    await call.message.answer("📋 Tanlang:", parse_mode="Markdown", reply_markup=prayer_times_buttons(language))

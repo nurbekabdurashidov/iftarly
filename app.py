@@ -3,7 +3,6 @@ from loader import dp, bot
 import asyncio
 from utils.notify_admins import start, shutdown
 from middlewares.mymiddleware import UserCheckMiddleware
-# Info
 import logging
 from utils.set_botcommands import private_chat_commands
 import sys
@@ -17,8 +16,9 @@ async def main():
         dp.shutdown.register(shutdown)
         dp.message.middleware(UserCheckMiddleware())
 
-        # ✅ Start the scheduler as a background task
+        # ✅ Run scheduler in background
         asyncio.create_task(start_scheduler())
+ # Runs it in another thread
 
         # ✅ Start bot polling (this will block execution)
         await dp.start_polling(bot)
