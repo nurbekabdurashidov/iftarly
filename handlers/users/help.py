@@ -6,4 +6,4 @@ async def help_bot(message:types.Message):
     await message.answer(f"Qanday yordam kerak?\n"
                          f"Asosiy buyruqlar: \n/start\n"
                          f"/help\n"
-                         f"/set_language\n",)
+                         f"/setlanguage\n",)

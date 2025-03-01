@@ -5,7 +5,7 @@ async def private_chat_commands():
     commands = [
         types.BotCommand(command='start', description="Botni ishga tushirish"),
         types.BotCommand(command='help', description="Yordam"),
-        types.BotCommand(command='set_language', description="Tilni o'zgartirish")
+        types.BotCommand(command='setlanguage', description="Tilni o'zgartirish")
     ]
     await bot.set_my_commands(
         commands=commands,

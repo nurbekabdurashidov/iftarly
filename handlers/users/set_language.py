@@ -22,7 +22,7 @@ from keyboards.default.buttons import prayer_times_buttons
 
 
 API_URL = "https://iftarly.pythonanywhere.com/"
-@dp.message(Command('set_language'))
+@dp.message(Command('setlanguage'))
 async def setlanguage(message:types.Message):
     user = get_user(telegram_id=message.from_user.id)
     if user !='Not Found':
