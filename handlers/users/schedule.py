@@ -6,7 +6,7 @@ from aiogram.types import BufferedInputFile
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loader import bot
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "https://iftarly.pythonanywhere.com/"
 scheduler = AsyncIOScheduler()
 
 
