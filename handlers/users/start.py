@@ -13,7 +13,7 @@ import io
 from aiogram.types import BufferedInputFile, InlineKeyboardMarkup
 import aiohttp
 
-API_URL = "https://iftarly.pythonanywhere.com/"
+API_URL = "http://127.0.0.1:8000"
 
 # Tillar
 LANGUAGES = {
