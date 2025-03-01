@@ -19,6 +19,9 @@ from aiogram import types
 from api import get_user,change_user_language
 from keyboards.inline.buttons import LanguageCallback,language_button
 from keyboards.default.buttons import prayer_times_buttons
+
+
+API_URL = "https://iftarly.pythonanywhere.com/"
 @dp.message(Command('set_language'))
 async def setlanguage(message:types.Message):
     user = get_user(telegram_id=message.from_user.id)
