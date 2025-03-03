@@ -6,7 +6,6 @@ from middlewares.mymiddleware import UserCheckMiddleware
 import logging
 from utils.set_botcommands import private_chat_commands
 import sys
-from handlers.users.schedule import start_scheduler
 
 async def main():
     try:
@@ -17,7 +16,6 @@ async def main():
         dp.message.middleware(UserCheckMiddleware())
 
         # ✅ Run scheduler in background
-        asyncio.create_task(start_scheduler())
  # Runs it in another thread
 
         # ✅ Start bot polling (this will block execution)
